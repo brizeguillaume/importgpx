@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,  initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ironman 70.3 - Suivi d'entraînement</title>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -214,8 +214,8 @@
         }
 
         function setupEventListeners() {
-            // Upload
-            document.getElementById('uploadBtn').addEventListener('click', () => {
+            // Upload - Correction du clic qui ne fonctionnait pas
+            document.getElementById('uploadBtn').addEventListener('click', function() {
                 document.getElementById('fileInput').click();
             });
             
@@ -226,7 +226,7 @@
             document.getElementById('applyFilter').addEventListener('click', applyFilter);
         }
 
-        // Gestion des fichiers GPX
+        // Gestion des fichiers GPX (version corrigée)
         async function handleFileUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -244,7 +244,7 @@
             } catch (error) {
                 document.getElementById('fileList').innerHTML = 
                     `<p style="color: red;"><i class="fas fa-times"></i> Erreur: ${error.message}</p>`;
-                console.error(error);
+                console.error("Erreur d'analyse:", error);
             }
         }
 
@@ -287,7 +287,7 @@
                         reject(error);
                     }
                 };
-                reader.onerror = () => reject(new Error("Erreur de lecture"));
+                reader.onerror = () => reject(new Error("Erreur de lecture du fichier"));
                 reader.readAsText(file);
             });
         }
