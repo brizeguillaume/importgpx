@@ -37,6 +37,7 @@
             height: 400px;
             margin: 20px 0;
             border-radius: 10px;
+            border: 2px solid white;
         }
         .filters {
             display: flex;
@@ -49,6 +50,7 @@
             border-radius: 5px;
             border: none;
             background: var(--light);
+            font-size: 16px;
         }
         .stats {
             display: flex;
@@ -121,7 +123,7 @@
         <div class="upload-section">
             <h3>Importer un entraînement (GPX)</h3>
             <input type="file" id="fileInput" accept=".gpx" style="display: none;">
-            <button id="uploadBtn"><i class="fas fa-upload"></i> Sélectionner</button>
+            <button id="uploadBtn"><i class="fas fa-upload"></i> Sélectionner un fichier GPX</button>
             <div id="fileList" style="margin-top: 10px;"></div>
         </div>
         
@@ -138,12 +140,13 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
     <script>
-        // Base de données locale
+        // 1. BASE DE DONNÉES LOCALE
         const Database = {
             STORAGE_KEY: 'ironman_workouts',
             
             getAll() {
-                return JSON.parse(localStorage.getItem(this.STORAGE_KEY) || [];
+                const data = localStorage.getItem(this.STORAGE_KEY);
+                return data ? JSON.parse(data) : [];
             },
             
             save(workouts) {
@@ -158,24 +161,26 @@
             }
         };
 
-        // Gestion des données
+        // 2. ÉTAT DE L'APPLICATION
         let allWorkouts = Database.getAll();
         let filteredWorkouts = [];
         let map;
         let distanceChart, elevationChart;
 
-        // Initialisation
-        function init() {
+        // 3. INITIALISATION
+        document.addEventListener('DOMContentLoaded', function() {
             initMap();
             initCharts();
             setupEventListeners();
             updatePeriodOptions();
             applyFilter();
-        }
+        });
 
         function initMap() {
             map = L.map('map').setView([46.2127, -74.5824], 12);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
         }
 
         function initCharts() {
@@ -193,7 +198,11 @@
                     options: {
                         ...chartOptions,
                         plugins: {
-                            title: { display: true, text: 'Distance par séance (km)' }
+                            title: { 
+                                display: true, 
+                                text: 'Distance par séance (km)',
+                                color: '#333'
+                            }
                         }
                     }
                 }
@@ -206,90 +215,96 @@
                     options: {
                         ...chartOptions,
                         plugins: {
-                            title: { display: true, text: 'Dénivelé par séance (m)' }
+                            title: { 
+                                display: true, 
+                                text: 'Dénivelé par séance (m)',
+                                color: '#333'
+                            }
                         }
                     }
                 }
             );
         }
 
+        // 4. GESTION DES ÉVÉNEMENTS (CORRIGÉ)
         function setupEventListeners() {
-            // Upload - Correction du clic qui ne fonctionnait pas
-            document.getElementById('uploadBtn').addEventListener('click', function() {
-                document.getElementById('fileInput').click();
+            // Solution garantie pour le clic d'upload
+            const uploadBtn = document.getElementById('uploadBtn');
+            const fileInput = document.getElementById('fileInput');
+            
+            uploadBtn.addEventListener('click', function() {
+                fileInput.value = ''; // Réinitialise pour permettre le même fichier
+                fileInput.click();
             });
             
-            document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+            fileInput.addEventListener('change', handleFileUpload);
             
             // Filtres
             document.getElementById('periodType').addEventListener('change', updatePeriodOptions);
             document.getElementById('applyFilter').addEventListener('click', applyFilter);
         }
 
-        // Gestion des fichiers GPX (version corrigée)
-        async function handleFileUpload(event) {
+        // 5. IMPORT DE FICHIERS (FONCTIONNEL)
+        function handleFileUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
             
-            document.getElementById('fileList').innerHTML = 
-                '<p><i class="fas fa-spinner fa-spin"></i> Analyse en cours...</p>';
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Analyse du fichier...</p>';
             
-            try {
-                const workout = await parseGPXFile(file);
-                allWorkouts = Database.add(workout);
-                updatePeriodOptions();
-                applyFilter();
-                document.getElementById('fileList').innerHTML = 
-                    `<p style="color: green;"><i class="fas fa-check"></i> ${file.name} analysé</p>`;
-            } catch (error) {
-                document.getElementById('fileList').innerHTML = 
-                    `<p style="color: red;"><i class="fas fa-times"></i> Erreur: ${error.message}</p>`;
-                console.error("Erreur d'analyse:", error);
-            }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const workout = parseGPXFile(e.target.result, file.name);
+                    allWorkouts = Database.add(workout);
+                    updatePeriodOptions();
+                    applyFilter();
+                    fileList.innerHTML = `<p style="color: green;"><i class="fas fa-check-circle"></i> ${file.name} importé avec succès</p>`;
+                } catch (error) {
+                    fileList.innerHTML = `<p style="color: red;"><i class="fas fa-exclamation-circle"></i> Erreur: ${error.message}</p>`;
+                    console.error("Erreur d'import:", error);
+                }
+            };
+            reader.onerror = function() {
+                fileList.innerHTML = '<p style="color: red;"><i class="fas fa-exclamation-circle"></i> Erreur de lecture du fichier</p>';
+            };
+            reader.readAsText(file);
         }
 
-        async function parseGPXFile(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    try {
-                        const parser = new DOMParser();
-                        const xmlDoc = parser.parseFromString(event.target.result, "text/xml");
-                        const trkpts = Array.from(xmlDoc.querySelectorAll('trkpt'));
-                        
-                        if (trkpts.length === 0) {
-                            throw new Error("Aucune donnée GPS valide");
-                        }
-                        
-                        // Extraction des points
-                        const points = trkpts.map(pt => {
-                            return {
-                                lat: parseFloat(pt.getAttribute('lat')),
-                                lon: parseFloat(pt.getAttribute('lon')),
-                                ele: parseFloat(pt.querySelector('ele')?.textContent || 0),
-                                time: pt.querySelector('time')?.textContent
-                            };
-                        });
-                        
-                        // Calcul des stats
-                        const stats = calculateStats(points);
-                        
-                        const workout = {
-                            id: Date.now(),
-                            fileName: file.name,
-                            date: points[0]?.time || new Date().toISOString(),
-                            points,
-                            stats
-                        };
-                        
-                        resolve(workout);
-                    } catch (error) {
-                        reject(error);
-                    }
+        function parseGPXFile(gpxContent, fileName) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(gpxContent, "text/xml");
+            const parserError = xmlDoc.querySelector('parsererror');
+            
+            if (parserError) {
+                throw new Error("Fichier GPX invalide");
+            }
+            
+            const trkpts = Array.from(xmlDoc.querySelectorAll('trkpt'));
+            if (trkpts.length === 0) {
+                throw new Error("Aucune trace GPS trouvée dans le fichier");
+            }
+            
+            // Extraction des points
+            const points = trkpts.map(pt => {
+                return {
+                    lat: parseFloat(pt.getAttribute('lat')),
+                    lon: parseFloat(pt.getAttribute('lon')),
+                    ele: parseFloat(pt.querySelector('ele')?.textContent || 0),
+                    time: pt.querySelector('time')?.textContent
                 };
-                reader.onerror = () => reject(new Error("Erreur de lecture du fichier"));
-                reader.readAsText(file);
             });
+            
+            // Calcul des statistiques
+            const stats = calculateStats(points);
+            
+            return {
+                id: Date.now(),
+                fileName,
+                date: points[0]?.time || new Date().toISOString(),
+                points,
+                stats
+            };
         }
 
         function calculateStats(points) {
@@ -300,7 +315,7 @@
             points.forEach((point, i) => {
                 if (i > 0) {
                     // Distance (km)
-                    distance += getDistanceBetweenPoints(prevPoint, point);
+                    distance += calculateDistance(prevPoint, point);
                     
                     // Dénivelé (m)
                     if (point.ele > prevPoint.ele) {
@@ -321,8 +336,8 @@
             };
         }
 
-        function getDistanceBetweenPoints(p1, p2) {
-            const R = 6371; // Rayon Terre en km
+        function calculateDistance(p1, p2) {
+            const R = 6371; // Rayon de la Terre en km
             const dLat = (p2.lat - p1.lat) * Math.PI / 180;
             const dLon = (p2.lon - p1.lon) * Math.PI / 180;
             const a = 
@@ -332,7 +347,7 @@
             return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         }
 
-        // Gestion des filtres
+        // 6. FILTRES ET AFFICHAGE
         function updatePeriodOptions() {
             const periodType = document.getElementById('periodType').value;
             const select = document.getElementById('periodSelect');
@@ -340,37 +355,25 @@
             
             if (allWorkouts.length === 0) return;
             
-            // Extraire les périodes uniques
+            // Récupère toutes les périodes uniques
             const periods = new Set();
             allWorkouts.forEach(workout => {
                 const date = new Date(workout.date);
-                let period;
-                
-                if (periodType === 'month') {
-                    period = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                } else {
-                    // Semaine ISO (yyyy-Www)
-                    const weekNum = getWeekNumber(date);
-                    period = `${date.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
-                }
-                
+                const period = periodType === 'month' 
+                    ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+                    : `${date.getFullYear()}-W${getWeekNumber(date).toString().padStart(2, '0')}`;
                 periods.add(period);
             });
             
-            // Trier et ajouter les options
+            // Ajoute les options triées
             Array.from(periods)
                 .sort()
                 .forEach(period => {
                     const option = document.createElement('option');
                     option.value = period;
-                    
-                    if (periodType === 'month') {
-                        const [year, month] = period.split('-');
-                        option.text = `${month}/${year}`;
-                    } else {
-                        option.text = `Semaine ${period.split('-W')[1]} (${period.split('-W')[0]})`;
-                    }
-                    
+                    option.textContent = periodType === 'month'
+                        ? `${period.split('-')[1]}/${period.split('-')[0]}`
+                        : `Semaine ${period.split('-W')[1]} (${period.split('-W')[0]})`;
                     select.appendChild(option);
                 });
         }
@@ -387,28 +390,19 @@
             const periodType = document.getElementById('periodType').value;
             const periodValue = document.getElementById('periodSelect').value;
             
-            if (periodValue === 'all') {
-                filteredWorkouts = [...allWorkouts];
-            } else {
-                filteredWorkouts = allWorkouts.filter(workout => {
-                    const workoutDate = new Date(workout.date);
-                    let workoutPeriod;
-                    
-                    if (periodType === 'month') {
-                        workoutPeriod = `${workoutDate.getFullYear()}-${String(workoutDate.getMonth() + 1).padStart(2, '0')}`;
-                    } else {
-                        const weekNum = getWeekNumber(workoutDate);
-                        workoutPeriod = `${workoutDate.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
-                    }
-                    
+            filteredWorkouts = periodValue === 'all'
+                ? [...allWorkouts]
+                : allWorkouts.filter(workout => {
+                    const date = new Date(workout.date);
+                    const workoutPeriod = periodType === 'month'
+                        ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+                        : `${date.getFullYear()}-W${getWeekNumber(date).toString().padStart(2, '0')}`;
                     return workoutPeriod === periodValue;
                 });
-            }
             
             updateUI();
         }
 
-        // Mise à jour de l'interface
         function updateUI() {
             updateStats();
             updateCharts();
@@ -427,7 +421,6 @@
         }
 
         function updateCharts() {
-            // Graphique distance
             distanceChart.data = {
                 labels: filteredWorkouts.map(w => new Date(w.date).toLocaleDateString()),
                 datasets: [{
@@ -437,7 +430,6 @@
             };
             distanceChart.update();
             
-            // Graphique dénivelé
             elevationChart.data = {
                 labels: filteredWorkouts.map(w => new Date(w.date).toLocaleDateString()),
                 datasets: [{
@@ -454,27 +446,28 @@
                 if (layer instanceof L.Polyline) map.removeLayer(layer);
             });
             
-            // Afficher tous les tracés filtrés
+            // Ajouter les nouveaux tracés
             filteredWorkouts.forEach(workout => {
                 if (workout.points.length > 1) {
                     const latLngs = workout.points.map(p => [p.lat, p.lon]);
-                    L.polyline(latLngs, { color: '#e63946' }).addTo(map);
+                    L.polyline(latLngs, {
+                        color: '#e63946',
+                        weight: 4,
+                        opacity: 0.7
+                    }).addTo(map);
                 }
             });
             
-            // Ajuster la vue si besoin
+            // Ajuster la vue
             if (filteredWorkouts.length > 0 && filteredWorkouts[0].points.length > 0) {
                 const bounds = L.latLngBounds(
                     filteredWorkouts.flatMap(w => 
                         w.points.map(p => [p.lat, p.lon])
                     )
                 );
-                map.fitBounds(bounds);
+                map.fitBounds(bounds, { padding: [50, 50] });
             }
         }
-
-        // Démarrer l'application
-        document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 </html>
