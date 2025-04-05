@@ -351,6 +351,8 @@
                     <th>Distance (km)</th>
                     <th>Durée (h)</th>
                     <th>Dénivelé (m)</th>
+                    <th>FC moy (bpm)</th>
+                    <th>Puissance moy (W)</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -381,6 +383,14 @@
             <div class="detail-row">
                 <span class="detail-label">Allure moyenne:</span>
                 <span id="avgPace">0 min/km</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Fréquence cardiaque moyenne:</span>
+                <span id="avgHR">0 bpm</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Puissance moyenne:</span>
+                <span id="avgPower">0 W</span>
             </div>
             <div class="detail-row">
                 <span class="detail-label">Dénivelé positif:</span>
@@ -595,18 +605,42 @@
                 throw new Error("Aucune trace GPS trouvée dans le fichier");
             }
             
-            // Extraction des points
+            // Extraction des points et des données supplémentaires
+            let totalHR = 0;
+            let hrCount = 0;
+            let totalPower = 0;
+            let powerCount = 0;
+            
             const points = trkpts.map(pt => {
+                const hr = pt.querySelector('hr') ? parseInt(pt.querySelector('hr').textContent) : null;
+                const power = pt.querySelector('power') ? parseInt(pt.querySelector('power').textContent) : null;
+                
+                if (hr !== null) {
+                    totalHR += hr;
+                    hrCount++;
+                }
+                
+                if (power !== null) {
+                    totalPower += power;
+                    powerCount++;
+                }
+                
                 return {
                     lat: parseFloat(pt.getAttribute('lat')),
                     lon: parseFloat(pt.getAttribute('lon')),
                     ele: parseFloat(pt.querySelector('ele')?.textContent || 0),
-                    time: pt.querySelector('time')?.textContent
+                    time: pt.querySelector('time')?.textContent,
+                    hr: hr,
+                    power: power
                 };
             });
             
             // Calcul des statistiques
             const stats = calculateStats(points, sportType);
+            
+            // Ajout des moyennes
+            stats.avgHR = hrCount > 0 ? Math.round(totalHR / hrCount) : null;
+            stats.avgPower = powerCount > 0 ? Math.round(totalPower / powerCount) : null;
             
             return {
                 id: Date.now(),
@@ -700,6 +734,8 @@
                     <td>${workout.stats.distance.toFixed(2)}</td>
                     <td>${workout.stats.duration.toFixed(2)}</td>
                     <td>${workout.stats.elevationGain}</td>
+                    <td>${workout.stats.avgHR || '-'}</td>
+                    <td>${workout.sport === 'bike' ? (workout.stats.avgPower || '-') : '-'}</td>
                     <td>
                         <button class="delete-btn" data-id="${workout.id}" title="Supprimer">
                             <i class="fas fa-trash"></i>
@@ -797,6 +833,8 @@
                 document.getElementById('avgPace').textContent = 'N/A';
             }
             
+            document.getElementById('avgHR').textContent = workout.stats.avgHR ? `${workout.stats.avgHR} bpm` : 'N/A';
+            document.getElementById('avgPower').textContent = workout.stats.avgPower ? `${workout.stats.avgPower} W` : 'N/A';
             document.getElementById('elevGain').textContent = `${workout.stats.elevationGain} m`;
             document.getElementById('elevLoss').textContent = `${workout.stats.elevationLoss} m`;
             document.getElementById('maxElev').textContent = `${workout.stats.maxElev} m`;
@@ -972,7 +1010,9 @@
                         <b>${workout.sport === 'bike' ? 'Vélo' : workout.sport === 'run' ? 'Course' : 'Natation'}</b><br>
                         ${new Date(workout.date).toLocaleDateString()}<br>
                         Distance: ${workout.stats.distance.toFixed(2)} km<br>
-                        Durée: ${workout.stats.duration.toFixed(2)} h
+                        Durée: ${workout.stats.duration.toFixed(2)} h<br>
+                        ${workout.stats.avgHR ? `FC moy: ${workout.stats.avgHR} bpm<br>` : ''}
+                        ${workout.sport === 'bike' && workout.stats.avgPower ? `Puissance moy: ${workout.stats.avgPower} W` : ''}
                     `);
                 }
             });
